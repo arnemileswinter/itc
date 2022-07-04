@@ -59,6 +59,8 @@ fork :: Stamp -> (Stamp, Stamp)
 fork (Stamp i e) = let (i1, i2) = split i in (Stamp i1 e, Stamp i2 e)
 
 -- | inverse of fork. s = uncurry join (fork s)
+--   Note that the internal call to `sumId` may be partial, if the ITC Stamp was constructed through direct constructor usage.
+--   Using only `fork` and `join` as the safe API to create stamps will not lead to this inconsistency.
 join :: Stamp -> Stamp -> Stamp
 join (Stamp i1 e1) (Stamp i2 e2) = Stamp (sumId i1 i2) (joinEv e1 e2)
 
@@ -124,7 +126,7 @@ sumId :: ITCId -> ITCId -> ITCId
 sumId (ITCId False) i = i
 sumId i (ITCId False) = i
 sumId (ITCIdBranch l1 r1) (ITCIdBranch l2 r2) = normId (ITCIdBranch (sumId l1 l2) (sumId r1 r2))
-sumId _ _ = error "cannot sum with previos version of same stamp! Stamps must grow monotonically."
+sumId _ _ = error "internal consistency error. Create ID's only by means of fork and join."
 
 split :: ITCId -> (ITCId, ITCId)
 split (ITCId False) = (iF, iF)
