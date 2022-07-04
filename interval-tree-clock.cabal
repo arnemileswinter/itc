@@ -32,6 +32,7 @@ library
     hs-source-dirs: src
     build-depends: base ^>=4.14.3.0
     exposed-modules: Data.Clock.IntervalTree
+                   , Data.Clock.IntervalTree.Format
     ghc-options: -Wall
 
 test-suite test

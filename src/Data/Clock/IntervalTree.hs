@@ -29,9 +29,6 @@ module Data.Clock.IntervalTree (
     happenedBefore,
     StampComparison (..),
     stampCompare,
-
-    -- * Debugging
-    fmtStamp,
 ) where
 
 import GHC.Generics
@@ -47,17 +44,6 @@ data ITCEvent
     = ITCEventBranch Integer ITCEvent ITCEvent
     | ITCEventLeaf Integer
     deriving (Eq, Show)
-
--- | pretty print a stamp, like in the original paper.
-fmtStamp :: Stamp -> String
-fmtStamp (Stamp i e) = "(" <> fmtId i <> ", " <> fmtEv e <> ")"
-  where
-    fmtId (ITCId False) = "0"
-    fmtId (ITCId True) = "1"
-    fmtId (ITCIdBranch l r) = "(" <> fmtId l <> ", " <> fmtId r <> ")"
-
-    fmtEv (ITCEventLeaf n) = show n
-    fmtEv (ITCEventBranch n l r) = "(" <> show n <> ", " <> fmtEv l <> ", " <> fmtEv r <> ")"
 
 {- | The seed stamp.
    The first peer is to use this, then fork others.

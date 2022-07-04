@@ -5,7 +5,9 @@ import Test.Hspec.QuickCheck
 import Test.QuickCheck
 
 import Control.Monad (foldM)
+
 import Data.Clock.IntervalTree
+import Data.Clock.IntervalTree.Format
 
 newtype ArbitraryITC = ArbitraryITC Stamp
 
