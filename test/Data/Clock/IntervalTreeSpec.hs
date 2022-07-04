@@ -97,19 +97,18 @@ spec = do
 
 printTikzExample :: IO ()
 printTikzExample =
-  let
-    a = seed
-    (b,h) = fork a
-    c = event b
-    i = event h
-    (d,j) = fork c
-    e = event d
-    k = event i
-    l = join j k
-    (m,n) = fork l
-    f = join e m
-    g = event f
+    let a = seed
+        (b, h) = fork a
+        c = event b
+        i = event h
+        (d, j) = fork c
+        e = event d
+        k = event i
+        l = join j k
+        (m, n) = fork l
+        f = join e m
+        g = event f
 
-    tikzpic letter itc = "\\newcommand{\\itc"<>[letter]<>"}{" <> fmtStampTikz itc <> "}\n"
-  in do
-    putStrLn $ concat $ zipWith (tikzpic) ['a'..] [a,b,c,d,e,f,g,h,i,j,k,l,m,n]
+        tikzpic letter itc = "\\newcommand{\\itc" <> [letter] <> "}{" <> fmtStampTikz itc <> "}\n"
+     in do
+            putStrLn $ concat $ zipWith (tikzpic) ['a' ..] [a, b, c, d, e, f, g, h, i, j, k, l, m, n]

@@ -14,6 +14,9 @@ fmtStamp (Stamp i e) = "(" <> fmtId i <> ", " <> fmtEv e <> ")"
     fmtEv (ITCEventLeaf n) = show n
     fmtEv (ITCEventBranch n l r) = "(" <> show n <> ", " <> fmtEv l <> ", " <> fmtEv r <> ")"
 
+{- | prints a stamp as a tikz picture for latex usage.
+   This mostly aided me in visual debugging.
+-}
 fmtStampTikz :: Stamp -> String
 fmtStampTikz (Stamp i e) = fmtIdsTikz i ++ "\n" ++ fmtEventsTikz e
   where
@@ -22,8 +25,9 @@ fmtStampTikz (Stamp i e) = fmtIdsTikz i ++ "\n" ++ fmtEventsTikz e
     tikzLineHeight = 0.25
 
     tikzRect :: Maybe String -> (Double, Double) -> (Double, Double) -> String
-    tikzRect _ _ (w,h) | w == 0 = ""
-                       | h == 0 = ""
+    tikzRect _ _ (w, h)
+        | w == 0 = ""
+        | h == 0 = ""
     tikzRect m (x, y) (w, h) =
         "\\node[rectangle,draw=black,anchor=north west,"
             <> (case m of Just s -> "fill=" <> s <> ","; Nothing -> "")
@@ -42,12 +46,12 @@ fmtStampTikz (Stamp i e) = fmtIdsTikz i ++ "\n" ++ fmtEventsTikz e
     fmtIdsTikz i0 = go 0 tikzWidth i0
       where
         go oh w (ITCId b)
-            | b = tikzRect (Just "blue!40!white") (oh, -tikzLineHeight) (w, tikzLineHeight)
+            | b = tikzRect (Just "blue!40!white") (oh, - tikzLineHeight) (w, tikzLineHeight)
             | otherwise = ""
         go oh w (ITCIdBranch l r) = go oh (w / 2) l <> go (oh + w / 2) (w / 2) r
 
     fmtEventsTikz :: ITCEvent -> String
-    fmtEventsTikz e0 = go tikzWidth 0 (-tikzLineHeight) e0
+    fmtEventsTikz e0 = go tikzWidth 0 (- tikzLineHeight) e0
       where
         go w oh ov (ITCEventLeaf n) = tikzRect Nothing (oh, ov + (fromIntegral n * tikzLineHeight)) (w, fromIntegral n * tikzLineHeight)
         go w oh ov (ITCEventBranch n l r) =
