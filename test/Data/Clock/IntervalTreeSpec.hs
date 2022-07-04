@@ -20,7 +20,7 @@ instance Arbitrary ArbitraryITC where
     arbitrary = fmap ArbitraryITC $ do
         let initial = seed
         let genOp = elements [event, fst . fork, snd . fork] :: (Gen (Stamp -> Stamp))
-        i <- chooseInt (0, 10)
+        i <- chooseInt (0, 200)
         foldM (fmap . flip id) initial $ replicate i genOp
 
 {- | Show instance for test subjects.
