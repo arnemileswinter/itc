@@ -105,7 +105,7 @@ stampCompare s1 s2
 -}
 happenedBefore :: Stamp -> Stamp -> Bool
 (Stamp _ e1) `happenedBefore` (Stamp _ e2) =
-  (e1 `evLeq` e2) && not (e2 `evLeq` e1)
+    (e1 `evLeq` e2) && not (e2 `evLeq` e1)
 
 -- | some utility functions because the constructors are so verbose.
 iF, iT :: ITCId
@@ -217,14 +217,14 @@ joinEv (ITCEventBranch n1 l1 r1) (ITCEventBranch n2 l2 r2) =
     normEv $
         ITCEventBranch
             n1
-            (joinEv l1 (liftEv l2 (n2 - n1)))
-            (joinEv r1 (liftEv r2 (n2 - n1)))
+            (joinEv l1 $ liftEv l2 $ n2 - n1)
+            (joinEv r1 $ liftEv r2 $ n2 - n1)
 
 normEv :: ITCEvent -> ITCEvent
 normEv n@(ITCEventLeaf _) = n
 normEv (ITCEventBranch n (ITCEventLeaf m) (ITCEventLeaf m'))
-  | m == m' = ITCEventLeaf (n + m)
-normEv (ITCEventBranch n e1 e2) = ITCEventBranch n (sinkEv e1 m) (sinkEv e2 m)
+    | m == m' = ITCEventLeaf (n + m)
+normEv (ITCEventBranch n e1 e2) = ITCEventBranch (n + m) (sinkEv e1 m) (sinkEv e2 m)
   where
     m = min (minEv e1) (minEv e2)
 
