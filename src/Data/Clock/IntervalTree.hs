@@ -10,7 +10,7 @@
    Paper by Almeida, Paulo & Baquero, Carlos & Fonte, Victor.
    This implementation by Arne Winter.
 -}
-module Data.ITC (
+module Data.Clock.IntervalTree (
     -- * Types
     Stamp (..),
     ITCId (..),
@@ -118,7 +118,8 @@ stampCompare s1 s2
    Use this to examine causility of stamps.
 -}
 happenedBefore :: Stamp -> Stamp -> Bool
-(Stamp _ e1) `happenedBefore` (Stamp _ e2) = e1 `evLeq` e2
+(Stamp _ e1) `happenedBefore` (Stamp _ e2) =
+  (e1 `evLeq` e2) && not (e2 `evLeq` e1)
 
 -- | some utility functions because the constructors are so verbose.
 iF, iT :: ITCId
@@ -223,14 +224,14 @@ evLeq :: ITCEvent -> ITCEvent -> Bool
 (ITCEventBranch n1 l1 r1) `evLeq` (ITCEventLeaf n2) =
     and $
         [ n1 <= n2
-        , liftEv l1 n1 `evLeq` (ITCEventLeaf n2)
-        , liftEv r1 n1 `evLeq` (ITCEventLeaf n2)
+        , (l1 `liftEv` n1) `evLeq` (ITCEventLeaf n2)
+        , (r1 `liftEv` n1) `evLeq` (ITCEventLeaf n2)
         ]
 (ITCEventBranch n1 l1 r1) `evLeq` (ITCEventBranch n2 l2 r2) =
     and $
         [ n1 <= n2
-        , liftEv l1 n1 `evLeq` liftEv l2 n2
-        , liftEv r1 n1 `evLeq` liftEv r2 n2
+        , (l1 `liftEv` n1) `evLeq` (l2 `liftEv` n2)
+        , (r1 `liftEv` n1) `evLeq` (r2 `liftEv` n2)
         ]
 
 liftEv, sinkEv :: ITCEvent -> Integer -> ITCEvent
@@ -252,8 +253,8 @@ joinEv (ITCEventBranch n1 l1 r1) (ITCEventBranch n2 l2 r2) =
 
 normEv :: ITCEvent -> ITCEvent
 normEv n@(ITCEventLeaf _) = n
-normEv (ITCEventBranch n e1 e2)
-    | evValue e1 == evValue e2 = ITCEventLeaf (n + evValue e1)
-    | otherwise = ITCEventBranch n (sinkEv e1 m) (sinkEv e2 m)
+normEv (ITCEventBranch n (ITCEventLeaf m) (ITCEventLeaf m'))
+  | m == m' = ITCEventLeaf (n + m)
+normEv (ITCEventBranch n e1 e2) = ITCEventBranch n (sinkEv e1 m) (sinkEv e2 m)
   where
     m = min (evValue e1) (evValue e2)
