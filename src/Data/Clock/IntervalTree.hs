@@ -149,13 +149,13 @@ split (ITCIdBranch l r) = (iB l iF, iB iF r)
 
 fill' :: ITCId -> ITCEvent -> ITCEvent
 fill' (ITCId False) e = e
-fill' (ITCId True) e = evHeight e
+fill' (ITCId True) e = ITCEventLeaf $ maxEv e
 fill' _ n@(ITCEventLeaf _) = n
 fill' (ITCIdBranch (ITCId True) ir) (ITCEventBranch n l r) =
     normEv $
         ITCEventBranch
             n
-            (evMax (evHeight l) (base r'))
+            (ITCEventLeaf (max (maxEv l) (minEv r')))
             r'
   where
     r' = fill' ir r
@@ -164,7 +164,7 @@ fill' (ITCIdBranch il (ITCId True)) (ITCEventBranch n l r) =
         ITCEventBranch
             n
             l'
-            (evMax (evHeight r) (base l'))
+            (ITCEventLeaf (max (maxEv r) (minEv l')))
   where
     l' = fill' il l
 fill' (ITCIdBranch il ir) (ITCEventBranch n l r) = normEv $ ITCEventBranch n (fill' il l) (fill' ir r)
@@ -200,23 +200,6 @@ grow' (Stamp (ITCIdBranch il ir) (ITCEventBranch n l r))
     (l', costL) = grow' $ Stamp il l
     (r', costR) = grow' $ Stamp ir r
 
-evValue :: ITCEvent -> Integer
-evValue (ITCEventLeaf n) = n
-evValue (ITCEventBranch n _ _) = n
-
-evHeight :: ITCEvent -> ITCEvent
-evHeight n@(ITCEventLeaf _) = n
-evHeight (ITCEventBranch n l r) = ITCEventLeaf $ n + (evValue $ evMax (evHeight l) (evHeight r))
-
-evMax :: ITCEvent -> ITCEvent -> ITCEvent
-evMax e1 e2
-    | e1 `evLeq` e2 = e2
-    | otherwise = e1
-
-base :: ITCEvent -> ITCEvent
-base (ITCEventBranch n _ _) = (ITCEventLeaf n)
-base n@(ITCEventLeaf _) = n
-
 -- | event comparison.
 evLeq :: ITCEvent -> ITCEvent -> Bool
 (ITCEventLeaf n1) `evLeq` (ITCEventLeaf n2) = n1 <= n2
@@ -240,7 +223,7 @@ liftEv (ITCEventBranch n e1 e2) m = ITCEventBranch (n + m) e1 e2
 sinkEv e m = liftEv e (- m)
 
 joinEv :: ITCEvent -> ITCEvent -> ITCEvent
-joinEv n1@(ITCEventLeaf _) n2@(ITCEventLeaf _) = evMax n1 n2
+joinEv (ITCEventLeaf n1) (ITCEventLeaf n2) = ITCEventLeaf (max n1 n2)
 joinEv (ITCEventLeaf n1) b@(ITCEventBranch _ _ _) = joinEv (ITCEventBranch n1 (ITCEventLeaf 0) (ITCEventLeaf 0)) b
 joinEv b@(ITCEventBranch _ _ _) (ITCEventLeaf n1) = joinEv b (ITCEventBranch n1 (ITCEventLeaf 0) (ITCEventLeaf 0))
 joinEv b1@(ITCEventBranch n1 _ _) b2@(ITCEventBranch n2 _ _) | n1 > n2 = joinEv b2 b1
@@ -257,4 +240,12 @@ normEv (ITCEventBranch n (ITCEventLeaf m) (ITCEventLeaf m'))
   | m == m' = ITCEventLeaf (n + m)
 normEv (ITCEventBranch n e1 e2) = ITCEventBranch n (sinkEv e1 m) (sinkEv e2 m)
   where
-    m = min (evValue e1) (evValue e2)
+    m = min (minEv e1) (minEv e2)
+
+minEv :: ITCEvent -> Integer
+minEv (ITCEventLeaf n) = n
+minEv (ITCEventBranch n e1 e2) = n + min (minEv e1) (minEv e2)
+
+maxEv :: ITCEvent -> Integer
+maxEv (ITCEventLeaf n) = n
+maxEv (ITCEventBranch n e1 e2) = n + max (maxEv e1) (maxEv e2)
