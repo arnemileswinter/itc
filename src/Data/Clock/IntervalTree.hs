@@ -37,12 +37,12 @@ data Stamp = Stamp ITCId ITCEvent deriving (Eq, Show, Generic)
 
 data ITCId
     = ITCIdBranch ITCId ITCId
-    | ITCId Bool
+    | ITCId !Bool
     deriving (Eq, Show)
 
 data ITCEvent
-    = ITCEventBranch Integer ITCEvent ITCEvent
-    | ITCEventLeaf Integer
+    = ITCEventBranch !Integer ITCEvent ITCEvent
+    | ITCEventLeaf !Integer
     deriving (Eq, Show)
 
 {- | The seed stamp.
