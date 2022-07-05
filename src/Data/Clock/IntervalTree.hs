@@ -75,12 +75,12 @@ peek (Stamp _ e) = Stamp iF e
 -}
 event :: Stamp -> Stamp
 event s@(Stamp i e) =
-    ( Stamp i $
-        if fill' i e /= e
-            then fill' i e
+    Stamp i $
+        if potentiallyNew /= e
+            then potentiallyNew
             else e'
-    )
   where
+    potentiallyNew = fill' i e
     (e', _) = grow' s
 
 data StampComparison
