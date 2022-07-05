@@ -38,12 +38,12 @@ data Stamp = Stamp ITCId ITCEvent deriving (Eq, Show, Generic)
 data ITCId
     = ITCIdBranch ITCId ITCId
     | ITCId !Bool
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
 
 data ITCEvent
     = ITCEventBranch !Integer ITCEvent ITCEvent
     | ITCEventLeaf !Integer
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
 
 {- | The seed stamp.
    The first peer is to use this, then fork others.
