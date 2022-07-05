@@ -103,7 +103,7 @@ stampCompare s1 s2
     | otherwise = Concurrent
 
 {- | the `happened before` relation for two stamps. (Note that I am unsure whether this is really the same relation as described by Lamport).
-   Use this to examine causility of stamps.
+   Use this to examine causality of stamps.
 -}
 happenedBefore :: Stamp -> Stamp -> Bool
 (Stamp _ e1) `happenedBefore` (Stamp _ e2) =
