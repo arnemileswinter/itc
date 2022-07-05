@@ -35,7 +35,7 @@ source-repository head
 library
     default-language: Haskell2010
     hs-source-dirs: src
-    build-depends: base ^>=4.14.3.0
+    build-depends: base >=4.14 && < 5
     exposed-modules: Data.Clock.IntervalTree
                    , Data.Clock.IntervalTree.Format
     ghc-options: -Wall
