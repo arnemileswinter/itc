@@ -1,4 +1,3 @@
--- |
 module Data.Clock.IntervalTree.Format where
 
 import Data.Clock.IntervalTree
@@ -7,8 +6,8 @@ import Data.Clock.IntervalTree
 fmtStamp :: Stamp -> String
 fmtStamp (Stamp i e) = "(" <> fmtId i <> ", " <> fmtEv e <> ")"
   where
-    fmtId (ITCId False) = "0"
-    fmtId (ITCId True) = "1"
+    fmtId ITCIdOff = "0"
+    fmtId ITCIdOn = "1"
     fmtId (ITCIdBranch l r) = "(" <> fmtId l <> ", " <> fmtId r <> ")"
 
     fmtEv (ITCEventLeaf n) = show n
@@ -45,10 +44,9 @@ fmtStampTikz (Stamp i e) = fmtIdsTikz i ++ "\n" ++ fmtEventsTikz e
     fmtIdsTikz :: ITCId -> String
     fmtIdsTikz i0 = go 0 tikzWidth i0
       where
-        go oh w (ITCId b)
-            | b = tikzRect (Just "blue!40!white") (oh, - tikzLineHeight) (w, tikzLineHeight)
-            | otherwise = ""
+        go oh w ITCIdOn = tikzRect (Just "blue!40!white") (oh, - tikzLineHeight) (w, tikzLineHeight)
         go oh w (ITCIdBranch l r) = go oh (w / 2) l <> go (oh + w / 2) (w / 2) r
+        go _ _ _ = ""
 
     fmtEventsTikz :: ITCEvent -> String
     fmtEventsTikz e0 = go tikzWidth 0 (- tikzLineHeight) e0

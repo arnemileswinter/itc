@@ -37,7 +37,8 @@ data Stamp = Stamp ITCId ITCEvent deriving (Eq, Show, Generic)
 
 data ITCId
     = ITCIdBranch ITCId ITCId
-    | ITCId !Bool
+    | ITCIdOff
+    | ITCIdOn
     deriving (Eq, Show, Generic)
 
 data ITCEvent
@@ -58,9 +59,10 @@ seed = Stamp iT (ITCEventLeaf 0)
 fork :: Stamp -> (Stamp, Stamp)
 fork (Stamp i e) = let (i1, i2) = split i in (Stamp i1 e, Stamp i2 e)
 
--- | inverse of fork. s = uncurry join (fork s)
---   Note that the internal call to `sumId` may be partial, if the ITC Stamp was constructed through direct constructor usage.
---   Using only `fork` and `join` as the safe API to create stamps will not lead to this inconsistency.
+{- | inverse of fork. s = uncurry join (fork s)
+   Note that the internal call to `sumId` may be partial, if the ITC Stamp was constructed through direct constructor usage.
+   Using only `fork` and `join` as the safe API to create stamps will not lead to this inconsistency.
+-}
 join :: Stamp -> Stamp -> Stamp
 join (Stamp i1 e1) (Stamp i2 e2) = Stamp (sumId i1 i2) (joinEv e1 e2)
 
@@ -111,35 +113,35 @@ happenedBefore :: Stamp -> Stamp -> Bool
 
 -- | some utility functions because the constructors are so verbose.
 iF, iT :: ITCId
-iF = ITCId False
-iT = ITCId True
+iF = ITCIdOff
+iT = ITCIdOn
 
 iB :: ITCId -> ITCId -> ITCId
 iB = ITCIdBranch
 
 normId :: ITCId -> ITCId
-normId (ITCIdBranch (ITCId False) (ITCId False)) = iF
-normId (ITCIdBranch (ITCId True) (ITCId True)) = iT
+normId (ITCIdBranch ITCIdOff ITCIdOff) = iF
+normId (ITCIdBranch ITCIdOn ITCIdOn) = iT
 normId leaf = leaf
 
 sumId :: ITCId -> ITCId -> ITCId
-sumId (ITCId False) i = i
-sumId i (ITCId False) = i
+sumId ITCIdOff i = i
+sumId i ITCIdOff = i
 sumId (ITCIdBranch l1 r1) (ITCIdBranch l2 r2) = normId (ITCIdBranch (sumId l1 l2) (sumId r1 r2))
 sumId _ _ = error "internal consistency error. Create ID's only by means of fork and join."
 
 split :: ITCId -> (ITCId, ITCId)
-split (ITCId False) = (iF, iF)
-split (ITCId True) = (iB iT iF, iB iF iT)
-split (ITCIdBranch (ITCId False) i) = (iB iF i1, iB iF i2) where (i1, i2) = split i
-split (ITCIdBranch i (ITCId False)) = (iB i1 iF, iB i2 iF) where (i1, i2) = split i
+split ITCIdOff = (iF, iF)
+split ITCIdOn = (iB iT iF, iB iF iT)
+split (ITCIdBranch ITCIdOff i) = (iB iF i1, iB iF i2) where (i1, i2) = split i
+split (ITCIdBranch i ITCIdOff) = (iB i1 iF, iB i2 iF) where (i1, i2) = split i
 split (ITCIdBranch l r) = (iB l iF, iB iF r)
 
 fill' :: ITCId -> ITCEvent -> ITCEvent
-fill' (ITCId False) e = e
-fill' (ITCId True) e = ITCEventLeaf $ maxEv e
+fill' ITCIdOff e = e
+fill' ITCIdOn e = ITCEventLeaf $ maxEv e
 fill' _ n@(ITCEventLeaf _) = n
-fill' (ITCIdBranch (ITCId True) ir) (ITCEventBranch n l r) =
+fill' (ITCIdBranch ITCIdOn ir) (ITCEventBranch n l r) =
     normEv $
         ITCEventBranch
             n
@@ -147,7 +149,7 @@ fill' (ITCIdBranch (ITCId True) ir) (ITCEventBranch n l r) =
             r'
   where
     r' = fill' ir r
-fill' (ITCIdBranch il (ITCId True)) (ITCEventBranch n l r) =
+fill' (ITCIdBranch il ITCIdOn) (ITCEventBranch n l r) =
     normEv $
         ITCEventBranch
             n
@@ -166,18 +168,18 @@ addCost :: Cost -> Cost -> Cost
 addCost (Cost c1) (Cost c2) = Cost $ c1 + c2
 
 grow' :: Stamp -> (ITCEvent, Cost)
-grow' (Stamp (ITCId True) (ITCEventLeaf n)) =
+grow' (Stamp ITCIdOn (ITCEventLeaf n)) =
     (ITCEventLeaf $ n + 1, Cost 0)
 grow' (Stamp i (ITCEventLeaf n)) =
     (e', c `addCost` largeCost)
   where
     largeCost = Cost 1000
     (e', c) = grow' $ Stamp i (ITCEventBranch n (ITCEventLeaf 0) (ITCEventLeaf 0))
-grow' (Stamp (ITCIdBranch (ITCId False) i) (ITCEventBranch n l r)) =
+grow' (Stamp (ITCIdBranch ITCIdOff i) (ITCEventBranch n l r)) =
     (ITCEventBranch n l r', cr `addCost` (Cost 1))
   where
     (r', cr) = grow' $ Stamp i r
-grow' (Stamp (ITCIdBranch i (ITCId False)) (ITCEventBranch n l r)) =
+grow' (Stamp (ITCIdBranch i ITCIdOff) (ITCEventBranch n l r)) =
     ((ITCEventBranch n l' r), cl `addCost` (Cost 1))
   where
     (l', cl) = grow' $ Stamp i l
