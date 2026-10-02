@@ -60,8 +60,13 @@ fork :: Stamp -> (Stamp, Stamp)
 fork (Stamp i e) = let (i1, i2) = split i in (Stamp i1 e, Stamp i2 e)
 
 {- | inverse of fork. s = uncurry join (fork s)
-   Note that the internal call to `sumId` may be partial, if the ITC Stamp was constructed through direct constructor usage.
-   Using only `fork` and `join` as the safe API to create stamps will not lead to this inconsistency.
+
+   Precondition: the identities of both stamps must be disjoint (or anonymous).
+   The paper requires identities to be kept globally unique, and leaves the sum of overlapping identities undefined.
+   This holds as long as every stamp is consumed at most once: after @fork s@, do not use @s@ again;
+   after @join a b@, do not use @a@ or @b@ again. Haskell does not enforce this, so e.g. @join s s@ or
+   joining a stamp with one of its own forks calls 'error'. The same applies to stamps built through direct constructor usage.
+   Joining with an anonymous stamp (see 'peek') is always safe.
 -}
 join :: Stamp -> Stamp -> Stamp
 join (Stamp i1 e1) (Stamp i2 e2) = Stamp (sumId i1 i2) (joinEv e1 e2)
@@ -74,8 +79,13 @@ peek (Stamp _ e) = Stamp iF e
 
 {- | when something happened on this peer.
    use the new stamp afterwards.
+
+   Precondition: the stamp must not be anonymous, i.e. must not come from 'peek'.
+   An anonymous stamp owns no part of the interval and thus cannot register events (section 5.3.4 of the paper).
+   Calling 'event' on an anonymous stamp calls 'error'.
 -}
 event :: Stamp -> Stamp
+event (Stamp ITCIdOff _) = error "event: cannot register an event on an anonymous stamp. Do not call event on the result of peek."
 event s@(Stamp i e) =
     Stamp i $
         if potentiallyNew /= e
@@ -97,6 +107,9 @@ data StampComparison
 {- | Compare two stamps.
    Note that stamp is not an instance of Ord because a <= b and b <= a does not imply a = b:
    rather that a happened concurrent to b per logical time.
+
+   Note that two stamps with equal event components (e.g. a stamp and itself, or the two halves of a 'fork')
+   also compare as 'Concurrent', since neither happened before the other.
 -}
 stampCompare :: Stamp -> Stamp -> StampComparison
 stampCompare s1 s2
@@ -104,7 +117,9 @@ stampCompare s1 s2
     | happenedBefore s2 s1 = After
     | otherwise = Concurrent
 
-{- | the `happened before` relation for two stamps. (Note that I am unsure whether this is really the same relation as described by Lamport).
+{- | the `happened before` relation for two stamps.
+   This is the strict version of the partial order from section 5.3.1 of the paper, which characterizes causality:
+   @a `happenedBefore` b@ iff the causal history of @a@ is strictly included in that of @b@.
    Use this to examine causality of stamps.
 -}
 happenedBefore :: Stamp -> Stamp -> Bool
@@ -159,33 +174,42 @@ fill' (ITCIdBranch il ITCIdOn) (ITCEventBranch n l r) =
     l' = fill' il l
 fill' (ITCIdBranch il ir) (ITCEventBranch n l r) = normEv $ ITCEventBranch n (fill' il l) (fill' ir r)
 
-newtype Cost = Cost Integer deriving (Eq, Ord)
+{- | Cost of a grow: number of leaf expansions first, then number of tree levels descended.
+   The paper encodes this as a single integer with a "large constant" N per expansion, which is only correct
+   while trees stay shallower than N, and notes that a pair under lexicographic order avoids the constant.
+   The derived Ord instance is that lexicographic order.
+-}
+data Cost = Cost !Integer !Integer deriving (Eq, Ord)
 
 ltCost :: Cost -> Cost -> Bool
-ltCost (Cost c1) (Cost c2) = c1 < c2
+ltCost = (<)
 
 addCost :: Cost -> Cost -> Cost
-addCost (Cost c1) (Cost c2) = Cost $ c1 + c2
+addCost (Cost x1 d1) (Cost x2 d2) = Cost (x1 + x2) (d1 + d2)
+
+noCost, expansionCost, descentCost :: Cost
+noCost = Cost 0 0
+expansionCost = Cost 1 0
+descentCost = Cost 0 1
 
 grow' :: Stamp -> (ITCEvent, Cost)
 grow' (Stamp ITCIdOn (ITCEventLeaf n)) =
-    (ITCEventLeaf $ n + 1, Cost 0)
+    (ITCEventLeaf $ n + 1, noCost)
 grow' (Stamp i (ITCEventLeaf n)) =
-    (e', c `addCost` largeCost)
+    (e', c `addCost` expansionCost)
   where
-    largeCost = Cost 1000
     (e', c) = grow' $ Stamp i (ITCEventBranch n (ITCEventLeaf 0) (ITCEventLeaf 0))
 grow' (Stamp (ITCIdBranch ITCIdOff i) (ITCEventBranch n l r)) =
-    (ITCEventBranch n l r', cr `addCost` (Cost 1))
+    (ITCEventBranch n l r', cr `addCost` descentCost)
   where
     (r', cr) = grow' $ Stamp i r
 grow' (Stamp (ITCIdBranch i ITCIdOff) (ITCEventBranch n l r)) =
-    ((ITCEventBranch n l' r), cl `addCost` (Cost 1))
+    ((ITCEventBranch n l' r), cl `addCost` descentCost)
   where
     (l', cl) = grow' $ Stamp i l
 grow' (Stamp (ITCIdBranch il ir) (ITCEventBranch n l r))
-    | costL `ltCost` costR = ((ITCEventBranch n l' r), costL `addCost` (Cost 1))
-    | otherwise = ((ITCEventBranch n l r'), costR `addCost` (Cost 1))
+    | costL `ltCost` costR = ((ITCEventBranch n l' r), costL `addCost` descentCost)
+    | otherwise = ((ITCEventBranch n l r'), costR `addCost` descentCost)
   where
     (l', costL) = grow' $ Stamp il l
     (r', costR) = grow' $ Stamp ir r

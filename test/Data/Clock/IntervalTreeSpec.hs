@@ -4,6 +4,7 @@ import Test.Hspec
 import Test.Hspec.QuickCheck
 import Test.QuickCheck
 
+import Control.Exception (evaluate)
 import Control.Monad (foldM)
 
 import Data.Clock.IntervalTree
@@ -22,6 +23,40 @@ instance Arbitrary ArbitraryITC where
         let genOp = elements [event, fst . fork, snd . fork] :: (Gen (Stamp -> Stamp))
         i <- chooseInt (0, 200)
         foldM (fmap . flip id) initial $ replicate i genOp
+
+{- | A whole system of live stamps with pairwise disjoint ids, evolved from the seed
+   by random `event`, `fork` and `join` steps. Each stamp is consumed at most once,
+   so that, unlike in `ArbitraryITC`, joined histories are exercised.
+   Invariant: joining all stamps of the system yields the full id.
+-}
+newtype ArbitrarySystem = ArbitrarySystem [Stamp]
+
+instance Arbitrary ArbitrarySystem where
+    arbitrary = fmap ArbitrarySystem $ do
+        n <- chooseInt (0, 200)
+        foldM (const . step) [seed] $ replicate n ()
+      where
+        pick xs = do
+            k <- chooseInt (0, length xs - 1)
+            pure (xs !! k, take k xs <> drop (k + 1) xs)
+        step :: [Stamp] -> Gen [Stamp]
+        step stamps = do
+            (s, rest) <- pick stamps
+            op <- chooseInt (0, if null rest then 1 else 2 :: Int)
+            case op of
+                0 -> pure $ event s : rest
+                1 -> let (a, b) = fork s in pure $ a : b : rest
+                _ -> do
+                    (s', rest') <- pick rest
+                    pure $ join s s' : rest'
+
+instance Show ArbitrarySystem where
+    show (ArbitrarySystem ss) = "ArbitrarySystem " <> show (map fmtStamp ss)
+
+-- | Runs the expectation on the first two stamps of a system, discarding systems of only one stamp.
+withTwo :: [Stamp] -> (Stamp -> Stamp -> Expectation) -> Property
+withTwo (a : b : _) f = property $ f a b
+withTwo _ _ = property Discard
 
 {- | Show instance for test subjects.
    Note that this is for human-friendly output and violates Read.
@@ -89,6 +124,34 @@ spec = do
                     , s2' `stampCompare` stamp' `shouldBe` Concurrent
                     , s2' `stampCompare` (event stamp') `shouldBe` Before
                     ]
+        prop "of a whole system has the full id and dominates every member" $ \(ArbitrarySystem stamps) ->
+            let joined@(Stamp i _) = foldr1 join stamps
+             in sequence_ $
+                    (i `shouldBe` ITCIdOn) :
+                    [(s `stampCompare` joined) `shouldNotBe` After | s <- stamps]
+        prop "of two members is not before either of them" $ \(ArbitrarySystem stamps) ->
+            withTwo stamps $ \a b ->
+                let j = join a b
+                 in sequence_
+                        [ (j `stampCompare` a) `shouldNotBe` Before
+                        , (j `stampCompare` b) `shouldNotBe` Before
+                        , (a `stampCompare` event j) `shouldBe` Before
+                        , (b `stampCompare` event j) `shouldBe` Before
+                        ]
+        prop "with an anonymous stamp keeps the id" $ \(ArbitrarySystem stamps) ->
+            withTwo stamps $ \a@(Stamp i _) b ->
+                let Stamp i' _ = join a (peek b)
+                 in i' `shouldBe` i
+        it "errors on overlapping ids" $
+            evaluate (let Stamp i _ = join seed seed in i) `shouldThrow` anyErrorCall
+    describe "event on joined histories" $ do
+        prop "strictly advances every member of a system" $ \(ArbitrarySystem stamps) ->
+            sequence_ [(s `stampCompare` event s) `shouldBe` Before | s <- stamps]
+        prop "is concurrent to events of other members" $ \(ArbitrarySystem stamps) ->
+            withTwo stamps $ \a b ->
+                (event a `stampCompare` event b) `shouldBe` Concurrent
+        it "errors on anonymous stamps" $
+            evaluate (event (peek seed)) `shouldThrow` errorCall "event: cannot register an event on an anonymous stamp. Do not call event on the result of peek."
     describe "happenedBefore" $ do
         prop "is false for self-comparison" $ \(ArbitraryITC stamp) ->
             not $ stamp `happenedBefore` stamp
