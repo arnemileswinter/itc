@@ -53,6 +53,11 @@ instance Arbitrary ArbitrarySystem where
 instance Show ArbitrarySystem where
     show (ArbitrarySystem ss) = "ArbitrarySystem " <> show (map fmtStamp ss)
 
+flipped :: StampComparison -> StampComparison
+flipped Before = After
+flipped After = Before
+flipped c = c
+
 -- | Runs the expectation on the first two stamps of a system, discarding systems of only one stamp.
 withTwo :: [Stamp] -> (Stamp -> Stamp -> Expectation) -> Property
 withTwo (a : b : _) f = property $ f a b
@@ -67,8 +72,24 @@ instance Show ArbitraryITC where
 spec :: Spec
 spec = do
     describe "stampCompare" $ do
-        prop "is concurrent in self-comparison" $ \(ArbitraryITC stamp) ->
-            (stamp `stampCompare` stamp) `shouldBe` Concurrent
+        prop "is equivalent in self-comparison" $ \(ArbitraryITC stamp) ->
+            (stamp `stampCompare` stamp) `shouldBe` Equivalent
+        prop "agrees with happenedBefore and sameHistory" $ \(ArbitrarySystem stamps) ->
+            sequence_
+                [ case a `stampCompare` b of
+                    Before -> (a `happenedBefore` b, b `happenedBefore` a, a `sameHistory` b) `shouldBe` (True, False, False)
+                    After -> (a `happenedBefore` b, b `happenedBefore` a, a `sameHistory` b) `shouldBe` (False, True, False)
+                    Equivalent -> (a `happenedBefore` b, b `happenedBefore` a, a `sameHistory` b) `shouldBe` (False, False, True)
+                    Concurrent -> (a `happenedBefore` b, b `happenedBefore` a, a `sameHistory` b) `shouldBe` (False, False, False)
+                | a <- take 6 stamps
+                , b <- take 6 stamps
+                ]
+        prop "flips Before and After when the arguments are swapped" $ \(ArbitrarySystem stamps) ->
+            sequence_
+                [ (b `stampCompare` a) `shouldBe` flipped (a `stampCompare` b)
+                | a <- take 6 stamps
+                , b <- take 6 stamps
+                ]
         prop "is Before in comparison to evented" $ \(ArbitraryITC stamp) ->
             (stamp `stampCompare` (event stamp)) `shouldBe` Before
         prop "is After in comparison to evented" $ \(ArbitraryITC stamp) ->
@@ -80,19 +101,19 @@ spec = do
         prop "forked stamps are unequal to each other" $ \(ArbitraryITC stamp) ->
             let (s1, s2) = fork stamp
              in s1 /= s2
-        prop "forks are concurrent to their parent" $ \(ArbitraryITC stamp) ->
+        prop "forks are equivalent to their parent" $ \(ArbitraryITC stamp) ->
             let (s1, s2) = fork stamp
              in sequence_ $
-                    fmap (`shouldBe` Concurrent) $
+                    fmap (`shouldBe` Equivalent) $
                         [ s1 `stampCompare` stamp
                         , stamp `stampCompare` s1
                         , s2 `stampCompare` stamp
                         , stamp `stampCompare` s2
                         ]
-        prop "forks are concurrent to each other" $ \(ArbitraryITC stamp) ->
+        prop "forks are equivalent to each other" $ \(ArbitraryITC stamp) ->
             let (s1, s2) = fork stamp
              in sequence_ $
-                    fmap (`shouldBe` Concurrent) $
+                    fmap (`shouldBe` Equivalent) $
                         [ s1 `stampCompare` s2
                         , s2 `stampCompare` s1
                         ]
@@ -121,7 +142,7 @@ spec = do
              in sequence_
                     [ stamp `stampCompare` stamp' `shouldBe` Before
                     , s1 `stampCompare` stamp' `shouldBe` Before
-                    , s2' `stampCompare` stamp' `shouldBe` Concurrent
+                    , s2' `stampCompare` stamp' `shouldBe` Equivalent
                     , s2' `stampCompare` (event stamp') `shouldBe` Before
                     ]
         prop "of a whole system has the full id and dominates every member" $ \(ArbitrarySystem stamps) ->
@@ -138,6 +159,8 @@ spec = do
                         , (a `stampCompare` event j) `shouldBe` Before
                         , (b `stampCompare` event j) `shouldBe` Before
                         ]
+        prop "of a stamp with its own anonymous copy is equivalent to it" $ \(ArbitrarySystem stamps) ->
+            sequence_ [(join s (peek s) `stampCompare` s) `shouldBe` Equivalent | s <- stamps]
         prop "with an anonymous stamp keeps the id" $ \(ArbitrarySystem stamps) ->
             withTwo stamps $ \a@(Stamp i _) b ->
                 let Stamp i' _ = join a (peek b)

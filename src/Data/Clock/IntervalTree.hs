@@ -27,6 +27,7 @@ module Data.Clock.IntervalTree (
 
     -- * Comparison
     happenedBefore,
+    sameHistory,
     StampComparison (..),
     stampCompare,
 ) where
@@ -96,26 +97,41 @@ event s@(Stamp i e) =
     (e', _) = grow' s
 
 data StampComparison
-    = -- | A happened before B.
+    = -- | A happened before B: the causal history of A is strictly included in that of B.
       Before
-    | -- | A happened after B.
+    | -- | A happened after B: the causal history of B is strictly included in that of A.
       After
-    | -- | A happened concurrent to B in logical time.
+    | -- | A and B have seen exactly the same events. E.g. a stamp and itself, or the two halves of a 'fork'.
+      Equivalent
+    | -- | A happened concurrent to B in logical time: each has seen events the other has not.
       Concurrent
     deriving (Eq, Show)
 
-{- | Compare two stamps.
-   Note that stamp is not an instance of Ord because a <= b and b <= a does not imply a = b:
-   rather that a happened concurrent to b per logical time.
+{- | Compare two stamps by the partial order of the paper (section 5.3.1) on their event components.
+   With a <= b meaning "the causal history of a is included in that of b":
 
-   Note that two stamps with equal event components (e.g. a stamp and itself, or the two halves of a 'fork')
-   also compare as 'Concurrent', since neither happened before the other.
+   * a <= b and not b <= a: 'Before'
+   * b <= a and not a <= b: 'After'
+   * a <= b and b <= a: 'Equivalent'
+   * neither: 'Concurrent'
+
+   Note that 'Stamp' is not an instance of Ord, because the order is partial ('Concurrent' stamps are incomparable),
+   and because 'Equivalent' stamps are not necessarily equal: their identities may differ.
 -}
 stampCompare :: Stamp -> Stamp -> StampComparison
-stampCompare s1 s2
-    | happenedBefore s1 s2 = Before
-    | happenedBefore s2 s1 = After
-    | otherwise = Concurrent
+stampCompare (Stamp _ e1) (Stamp _ e2) =
+    case (e1 `evLeq` e2, e2 `evLeq` e1) of
+        (True, False) -> Before
+        (False, True) -> After
+        (True, True) -> Equivalent
+        (False, False) -> Concurrent
+
+{- | whether two stamps have seen exactly the same events, regardless of their identities.
+   E.g. replicas with the same history are in sync, whereas 'Concurrent' replicas are in conflict.
+-}
+sameHistory :: Stamp -> Stamp -> Bool
+(Stamp _ e1) `sameHistory` (Stamp _ e2) =
+    (e1 `evLeq` e2) && (e2 `evLeq` e1)
 
 {- | the `happened before` relation for two stamps.
    This is the strict version of the partial order from section 5.3.1 of the paper, which characterizes causality:
